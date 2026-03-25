@@ -1,208 +1,184 @@
-const axios = require("axios");
-const { getPrefix } = global.utils;
-const { commands, aliases } = global.GoatBot;
+const fs = require("fs");
+const path = require("path");
 
-const fontUrl = "https://raw.githubusercontent.com/Azadwebapi/Azadx69x-bm-store/main/font.json";
-const categoryUrl = "https://raw.githubusercontent.com/Azadwebapi/Azadx69x-bm-store/main/category.json";
+const frames = ["👑","⚔️","🔥","♟️","🛠","🤖","🎮"];
 
-let fontMap = {};
-let categoryMap = {};
-let isLoading = false;
+// MEDIA
+const mediaFolder = path.join(__dirname, "help.gife");
 
-async function loadFont() {
-  try {
-    const res = await axios.get(fontUrl, { timeout: 5000 });
-    fontMap = res.data || {};
-  } catch (err) {
-    console.error("❌ Font load failed:", err.message);
-  }
-}
-
-async function loadCategory() {
-  if (isLoading) return;
-  isLoading = true;
-  
-  try {
-    const res = await axios.get(categoryUrl, { timeout: 5000 });
-    const rawData = res.data || {};
-    categoryMap = {};
-    
-    Object.keys(rawData).forEach(key => {
-      categoryMap[key.toLowerCase().trim()] = rawData[key];
-    });
-    
-    console.log("✅ Categories loaded:", Object.keys(categoryMap).length);
-  } catch (err) {
-    console.error("❌ Category load failed:", err.message);
-    categoryMap = {};
-  } finally {
-    isLoading = false;
-  }
-}
-
-function toBold(text) {
-  if (!text) return "";
-  return text.split("").map(ch => fontMap[ch] || ch).join("");
-}
-
-function getCategoryEmoji(category) {
-  if (Object.keys(categoryMap).length === 0 && !isLoading) {
-    loadCategory();
-  }
-  
-  const cat = (category || "").toLowerCase().trim();
-  return categoryMap[cat] || "📁";
-}
-
-// ===== RANDOM PREFIX MEDIA =====
-const mediaFolder = path.join(__dirname, "..", "prefix.gife");
-
-function getRandomPrefixMedia() {
+function getRandomHelpMedia() {
   try {
     const files = fs.readdirSync(mediaFolder);
-
-    const mediaFiles = files.filter(file =>
-      [".gif", ".mp4", ".jpg", ".png", ".jpeg"].includes(
-        path.extname(file).toLowerCase()
-      )
+    const media = files.filter(f =>
+      [".gif",".mp4",".jpg",".png",".jpeg"]
+      .includes(path.extname(f).toLowerCase())
     );
-
-    if (!mediaFiles.length) return null;
-
-    const randomFile = mediaFiles[Math.floor(Math.random() * mediaFiles.length)];
-    return fs.createReadStream(path.join(mediaFolder, randomFile));
-  } catch (err) {
-    console.log("Prefix media error:", err);
+    if (!media.length) return null;
+    const file = media[Math.floor(Math.random() * media.length)];
+    return fs.createReadStream(path.join(mediaFolder, file));
+  } catch {
     return null;
   }
 }
-   module.exports = {
+
+// FORMAT 2 COLUMN
+function formatCommands(cmds) {
+  let text = "";
+  let line = "┋➥ ";
+
+  cmds.forEach((cmd, i) => {
+    line += cmd.padEnd(15, " ");
+    if ((i + 1) % 2 === 0) {
+      text += line + "\n";
+      line = "┋➥ ";
+    }
+  });
+
+  if (line !== "┋➥ ") text += line + "\n";
+  return text;
+}
+
+module.exports = {
   config: {
     name: "help",
-    version: "0.0.7",
-    author: "Azadx69x",
+    aliases: ["menu"],
+    version: "4.1",
+    author: "Clean UI System",
     role: 0,
-    countDown: 5,
-    description: { 
-      en: "📚 Show command list or command details" 
-    },
-    category: "Info",
+    shortDescription: "Clean Help Menu",
+    category: "system",
     guide: {
-      en: "{pn} [command_name]"
+      en: "{pn} / {pn} <command> / {pn} all"
     }
   },
 
-  onStart: async function ({ message, args, event, role }) {
-    if (Object.keys(fontMap).length === 0) await loadFont();
-    if (Object.keys(categoryMap).length === 0) await loadCategory();
-    
-    const prefix = getPrefix(event.threadID);
-    const input = args[0]?.toLowerCase();
+  onStart: async function ({ message, args, role, api }) {
 
-    let cmd = null;
-    
-    if (input) {
-      if (commands.has(input)) {
-        cmd = commands.get(input);
-      } else if (aliases.has(input)) {
-        cmd = commands.get(aliases.get(input));
-      } else {
-        return message.reply(
-`❌ 𝗡𝗢𝗧 𝗙𝗢𝗨𝗡𝗗
-🔍 𝗖𝗼𝗺𝗺𝗮𝗻𝗱: "${input}"`
-        );
-      }
-    }
-    
-    if (cmd) {
+    const prefix = global.GoatBot.config.prefix;
+    const commands = global.GoatBot.commands;
+    const aliases = global.GoatBot.aliases;
+
+    const categoryMap = {};
+
+    // COLLECT COMMANDS
+    for (const [name, cmd] of commands) {
       const cfg = cmd.config;
-      const desc = typeof cfg.description === "string" ? cfg.description : cfg.description?.en || "❌ 𝗡𝗼 𝗱𝗲𝘀𝗰𝗿𝗶𝗽𝘁𝗶𝗼𝗻";
-      const usage = typeof cfg.guide?.en === "string" ? 
-        cfg.guide.en.replace(/\{pn\}/g, prefix + cfg.name) : 
-        `${prefix}${cfg.name}`;
+      if (!cfg) continue;
+      if ((cfg.role || 0) > role) continue;
 
-      const aliasesList = cfg.aliases ? 
-        cfg.aliases.map(a => `${prefix}${a}`).join(", ") : 
-        "❌ 𝗡𝗼𝗻𝗲";
+      const cat = (cfg.category || "other").toUpperCase();
 
-      const helpMessage = `┍━━━[ 📚 ${toBold("X69X HELP")} ]━━━◊
-┋➥ 📛 ${toBold("Name")}: ${prefix}${cfg.name}
-┋➥ 🗂️ ${toBold("Category")}: ${getCategoryEmoji(cfg.category)} ${cfg.category || "❌ 𝗨𝗻𝗰𝗮𝘁𝗲𝗴𝗼𝗿𝗶𝘇𝗲𝗱"}
-┋➥ 📄 ${toBold("Description")}: ${desc}
-┋➥ ⚙️ ${toBold("Version")}: ${cfg.version || "1.0"}
-┋➥ ⏳ ${toBold("Cooldown")}: ${cfg.countDown || 1}s
-┋➥ 🔒 ${toBold("Role")}: ${cfg.role === 0 ? "👤 𝗔𝗹𝗹" : cfg.role === 1 ? "👑 𝗔𝗱𝗺𝗶𝗻" : "⚡ 𝗢𝘄𝗻𝗲𝗿"}
-┋➥ 👑 ${toBold("Author")}: ${cfg.author || "❌ 𝗨𝗻𝗸𝗻𝗼𝘄𝗻"}
-┋➥ 🔤 ${toBold("Aliases")}: ${aliasesList}
-┍━━━[ 📘 ${toBold("USAGE")} ]━━━◊
-${usage.split('\n').map(line => `┋➥ ${line}`).join('\n')}
-┍━━━[ 💡 ${toBold("NOTES")} ]━━━◊
-┋➥ <text> = Replaceable content
-┋➥ [a|b] = Choose option a or b
-┋➥ ( ) = Optional parameter
-┋➥ {pn} = Bot prefix
-┕━━━━━━━━━━━━━━━━◊`;
-        
-      try {
-        await message.reply({
-          body: helpMessage,
-          attachment: await global.utils.getStreamFromURL("https://i.ibb.co/5X9T2dDN/image0.gif")
-        });
-      } catch (error) {
-        console.log("GIF attachment failed, sending text only:", error);
-        await message.reply(helpMessage);
-      }
-      return;
-    }
-      
-    const categories = {};
-    for (const [, c] of commands) {
-      if (c.config.role > role) continue;
-      const cat = c.config.category || "Uncategorized";
-      if (!categories[cat]) categories[cat] = [];
-      categories[cat].push(c.config.name);
-    }
+      if (!categoryMap[cat]) categoryMap[cat] = [];
 
-    let msg = `┍━━━[ 📚 ${toBold("X69X MENU")} ]━━━◊\n`;
-      
-    const sortedCategories = Object.keys(categories).sort();
-    
-    for (const cat of sortedCategories) {
-      const categoryName = toBold(cat.toUpperCase());
-      const commandsList = categories[cat].sort();
-      const emoji = getCategoryEmoji(cat);
-      
-      msg += `┍━━━[ ${emoji} ${categoryName} ]━━━◊\n`;
-        
-      for (let i = 0; i < commandsList.length; i += 2) {
-        const cmd1 = commandsList[i];
-        const cmd2 = commandsList[i + 1];
-        
-        const line = cmd2 ? 
-          `┋➥ ${cmd1.padEnd(15)} ${cmd2}` :
-          `┋➥ ${cmd1}`;
-        
-        msg += line + "\n";
-      }
-      
-      msg += "┕━━━━━━━━━━━━━━━━━◊\n";
-    }
-
-    msg += `┍━━━[ 🚀 ${toBold("INFO")} ]━━━◊
-┋➥ ${toBold("Welcome to Lelouch,s Bot!")}
-┋➥ ${toBold("Prefix")}: [ ${prefix} ]
-┋➥ ${toBold("nigga")}: lelouch
-┋➥ ${toBold("Use")}: ${prefix}help <command>
-┕━━━━━━━━━━━━━━━━◊`;
-      
-    try {
-      await message.reply({
-        body: msg,
-        attachment: await global.utils.getStreamFromURL("")
+      categoryMap[cat].push({
+        name,
+        aliases: cfg.aliases || [],
+        author: cfg.author || "Unknown",
+        version: cfg.version || "1.0",
+        role: cfg.role || 0,
+        cooldown: cfg.countDown || 5,
+        desc: cfg.shortDescription || "No description",
+        guide: cfg.guide || "No guide"
       });
-    } catch (error) {
-      console.log("GIF attachment failed, sending text only:", error);
-      await message.reply(msg);
     }
+
+    const categories = Object.keys(categoryMap).sort();
+
+    // ===== ALL =====
+    if (args[0] === "all") {
+      let msg = `┍━━━[  𝐀𝐋𝐋 𝐂𝐎𝐌𝐌𝐀𝐍𝐃𝐒 ]━━━◊\n`;
+
+      for (const cat of categories) {
+        msg += `┍━━━[ 📁 ${cat} ]━━━◊\n`;
+        msg += formatCommands(categoryMap[cat].map(c => c.name));
+        msg += `┕━━━━━━━━━━━━━━━━━◊\n`;
+      }
+
+      return message.reply({
+        body: msg,
+        attachment: getRandomHelpMedia()
+      });
+    }
+
+    // ===== COMMAND DETAILS =====
+    if (args[0] && isNaN(args[0])) {
+      const query = args[0].toLowerCase();
+
+      let cmd = commands.get(query);
+      if (!cmd && aliases.has(query))
+        cmd = commands.get(aliases.get(query));
+
+      if (!cmd) return message.reply("❌ Command not found");
+
+      const cfg = cmd.config;
+
+      let guide = cfg.guide || "No guide";
+      if (typeof guide === "object")
+        guide = guide.en || Object.values(guide)[0];
+
+      guide = String(guide).replace(/{pn}/g, prefix + cfg.name);
+
+      const msg =
+`┍━━━[  𝐂𝐎𝐌𝐌𝐀𝐍𝐃 𝐃𝐄𝐓𝐀𝐈𝐋𝐒 ]━━━◊
+
+👑 Name: ${prefix}${cfg.name}
+📝 Aliases: ${(cfg.aliases || []).join(", ") || "None"}
+👤 Author: ${cfg.author || "Unknown"}
+🎭 Version: ${cfg.version || "1.0"}
+🔐 Role: ${cfg.role || 0}
+⏱ Cooldown: ${cfg.countDown || 5}s
+📁 Category: ${cfg.category || "other"}
+
+📜 Description:
+${cfg.shortDescription || "No description"}
+
+📌 Usage:
+${guide}
+
+┕━━━━━━━━━━━━━━━━━◊`;
+
+      return message.reply({
+        body: msg,
+        attachment: getRandomHelpMedia()
+      });
+    }
+
+    // ===== MENU =====
+    function build(frame) {
+      let msg = `┍━━━[  𝐌𝐄𝐍𝐔 ]━━━◊\n`;
+
+      for (const cat of categories) {
+        msg += `┍━━━[ 📁 ${cat} ]━━━◊\n`;
+        msg += formatCommands(categoryMap[cat].map(c => c.name));
+        msg += `┕━━━━━━━━━━━━━━━━━◊\n`;
+      }
+
+      msg += `
+┍━━━[  𝐈𝐍𝐅𝐎 ]━━━◊
+┋➥ Total: ${commands.size}
+┋➥ ${prefix}help <cmd>
+┋➥ ${prefix}help all
+┕━━━━━━━━━━━━━━━━━◊
+
+${frame} SYSTEM ${frame}
+`;
+
+      return msg;
+    }
+
+    const sent = await message.reply({
+      body: build("👑"),
+      attachment: getRandomHelpMedia()
+    });
+
+    // ANIMATION
+    let i = 0;
+    setInterval(() => {
+      try {
+        const emoji = frames[i % frames.length];
+        api.editMessage(build(emoji), sent.messageID);
+        i++;
+      } catch {}
+    }, 2000);
   }
 };
