@@ -1,186 +1,214 @@
-const axios = require("axios");
-const { getPrefix } = global.utils;
-const { commands, aliases } = global.GoatBot;
+const fs = require("fs");
+const path = require("path");
 
-const fontUrl = "https://raw.githubusercontent.com/Azadwebapi/Azadx69x-bm-store/main/font.json";
-const categoryUrl = "https://raw.githubusercontent.com/Azadwebapi/Azadx69x-bm-store/main/category.json";
+const CATEGORY_PER_PAGE = 10;
+const frames = ["👑","🩸","⚔️","🕊️","🔥","🎭","♟️"];
 
-let fontMap = {};
-let categoryMap = {};
-let isLoading = false;
+// Lelouch Quotes
+const quotes = [
+  "The only ones who should kill are those prepared to be killed.",
+  "I will create a world where Nunnally can live happily.",
+  "Obey me, world!",
+  "If the king doesn’t move, then his subjects won’t follow.",
+  "I destroy worlds… and create them anew.",
+  "Power is not given. It is taken."
+];
 
-async function loadFont() {
+// MEDIA FOLDER
+const mediaFolder = path.join(__dirname, "help.gife");
+
+// RANDOM MEDIA
+function getRandomHelpMedia() {
   try {
-    const res = await axios.get(fontUrl, { timeout: 5000 });
-    fontMap = res.data || {};
-  } catch (err) {
-    console.error("❌ Font load failed:", err.message);
+    const files = fs.readdirSync(mediaFolder);
+    const media = files.filter(f =>
+      [".gif",".mp4",".jpg",".png",".jpeg"]
+      .includes(path.extname(f).toLowerCase())
+    );
+    if (!media.length) return null;
+    const file = media[Math.floor(Math.random() * media.length)];
+    return fs.createReadStream(path.join(mediaFolder, file));
+  } catch {
+    return null;
   }
 }
 
-async function loadCategory() {
-  if (isLoading) return;
-  isLoading = true;
-  
-  try {
-    const res = await axios.get(categoryUrl, { timeout: 5000 });
-    const rawData = res.data || {};
-    categoryMap = {};
-    
-    Object.keys(rawData).forEach(key => {
-      categoryMap[key.toLowerCase().trim()] = rawData[key];
-    });
-    
-    console.log("✅ Categories loaded:", Object.keys(categoryMap).length);
-  } catch (err) {
-    console.error("❌ Category load failed:", err.message);
-    categoryMap = {};
-  } finally {
-    isLoading = false;
-  }
+// RANDOM QUOTE
+function getQuote() {
+  return quotes[Math.floor(Math.random() * quotes.length)];
 }
 
-function toBold(text) {
-  if (!text) return "";
-  return text.split("").map(ch => fontMap[ch] || ch).join("");
-}
-
-function getCategoryEmoji(category) {
-  if (Object.keys(categoryMap).length === 0 && !isLoading) {
-    loadCategory();
-  }
-  
-  const cat = (category || "").toLowerCase().trim();
-  return categoryMap[cat] || "📁";
+// ARRAY CHUNK
+function chunkArray(arr, size) {
+  const result = [];
+  for (let i = 0; i < arr.length; i += size)
+    result.push(arr.slice(i, i + size));
+  return result;
 }
 
 module.exports = {
   config: {
     name: "help",
-    version: "0.0.7",
-    author: "Azadx69x",
-    role: 0,
+    aliases: ["menu"],
+    version: "2.0",
+    author: "Lelouch vi Britannia 👑",
     countDown: 5,
-    description: { 
-      en: "📚 Show command list or command details" 
-    },
-    category: "Info",
+    role: 0,
+    shortDescription: "Command system",
+    longDescription: "Lelouch styled command panel",
+    category: "system",
     guide: {
-      en: "{pn} [command_name]"
+      en: "{pn} / {pn} <page> / {pn} <command> / {pn} all"
     }
   },
 
-  onStart: async function ({ message, args, event, role }) {
-    if (Object.keys(fontMap).length === 0) await loadFont();
-    if (Object.keys(categoryMap).length === 0) await loadCategory();
-    
-    const prefix = getPrefix(event.threadID);
-    const input = args[0]?.toLowerCase();
+  onStart: async function ({ message, args, event, role, api }) {
 
-    let cmd = null;
-    
-    if (input) {
-      if (commands.has(input)) {
-        cmd = commands.get(input);
-      } else if (aliases.has(input)) {
-        cmd = commands.get(aliases.get(input));
-      } else {
-        return message.reply(
-`❌ 𝗡𝗢𝗧 𝗙𝗢𝗨𝗡𝗗
-🔍 𝗖𝗼𝗺𝗺𝗮𝗻𝗱: "${input}"`
-        );
-      }
-    }
-    
-    if (cmd) {
+    const prefix = global.GoatBot.config.prefix;
+    const commands = global.GoatBot.commands;
+    const aliases = global.GoatBot.aliases;
+
+    const categoryMap = {};
+
+    // COLLECT COMMANDS
+    for (const [name, cmd] of commands) {
       const cfg = cmd.config;
-      const desc = typeof cfg.description === "string" ? cfg.description : cfg.description?.en || "❌ 𝗡𝗼 𝗱𝗲𝘀𝗰𝗿𝗶𝗽𝘁𝗶𝗼𝗻";
-      const usage = typeof cfg.guide?.en === "string" ? 
-        cfg.guide.en.replace(/\{pn\}/g, prefix + cfg.name) : 
-        `${prefix}${cfg.name}`;
+      if (!cfg) continue;
+      if ((cfg.role || 0) > role) continue;
 
-      const aliasesList = cfg.aliases ? 
-        cfg.aliases.map(a => `${prefix}${a}`).join(", ") : 
-        "❌ 𝗡𝗼𝗻𝗲";
+      const category = (cfg.category || "general").toLowerCase();
 
-      const helpMessage = `┍━━━[ 📚 ${toBold("X69X HELP")} ]━━━◊
-┋➥ 📛 ${toBold("Name")}: ${prefix}${cfg.name}
-┋➥ 🗂️ ${toBold("Category")}: ${getCategoryEmoji(cfg.category)} ${cfg.category || "❌ 𝗨𝗻𝗰𝗮𝘁𝗲𝗴𝗼𝗿𝗶𝘇𝗲𝗱"}
-┋➥ 📄 ${toBold("Description")}: ${desc}
-┋➥ ⚙️ ${toBold("Version")}: ${cfg.version || "1.0"}
-┋➥ ⏳ ${toBold("Cooldown")}: ${cfg.countDown || 1}s
-┋➥ 🔒 ${toBold("Role")}: ${cfg.role === 0 ? "👤 𝗔𝗹𝗹" : cfg.role === 1 ? "👑 𝗔𝗱𝗺𝗶𝗻" : "⚡ 𝗢𝘄𝗻𝗲𝗿"}
-┋➥ 👑 ${toBold("Author")}: ${cfg.author || "❌ 𝗨𝗻𝗸𝗻𝗼𝘄𝗻"}
-┋➥ 🔤 ${toBold("Aliases")}: ${aliasesList}
-┍━━━[ 📘 ${toBold("USAGE")} ]━━━◊
-${usage.split('\n').map(line => `┋➥ ${line}`).join('\n')}
-┍━━━[ 💡 ${toBold("NOTES")} ]━━━◊
-┋➥ <text> = Replaceable content
-┋➥ [a|b] = Choose option a or b
-┋➥ ( ) = Optional parameter
-┋➥ {pn} = Bot prefix
-┕━━━━━━━━━━━━━━━━◊`;
-        
-      try {
-        await message.reply({
-          body: helpMessage,
-          attachment: await global.utils.getStreamFromURL("https://i.ibb.co/5X9T2dDN/image0.gif")
-        });
-      } catch (error) {
-        console.log("GIF attachment failed, sending text only:", error);
-        await message.reply(helpMessage);
-      }
-      return;
-    }
-      
-    const categories = {};
-    for (const [, c] of commands) {
-      if (c.config.role > role) continue;
-      const cat = c.config.category || "Uncategorized";
-      if (!categories[cat]) categories[cat] = [];
-      categories[cat].push(c.config.name);
-    }
+      if (!categoryMap[category])
+        categoryMap[category] = [];
 
-    let msg = `┍━━━[ 📚 ${toBold("X69X MENU")} ]━━━◊\n`;
-      
-    const sortedCategories = Object.keys(categories).sort();
-    
-    for (const cat of sortedCategories) {
-      const categoryName = toBold(cat.toUpperCase());
-      const commandsList = categories[cat].sort();
-      const emoji = getCategoryEmoji(cat);
-      
-      msg += `┍━━━[ ${emoji} ${categoryName} ]━━━◊\n`;
-        
-      for (let i = 0; i < commandsList.length; i += 2) {
-        const cmd1 = commandsList[i];
-        const cmd2 = commandsList[i + 1];
-        
-        const line = cmd2 ? 
-          `┋➥ ${cmd1.padEnd(15)} ${cmd2}` :
-          `┋➥ ${cmd1}`;
-        
-        msg += line + "\n";
-      }
-      
-      msg += "┕━━━━━━━━━━━━━━━━━◊\n";
-    }
-
-    msg += `┍━━━[ 🚀 ${toBold("INFO")} ]━━━◊
-┋➥ ${toBold("Welcome to X69X Bot!")}
-┋➥ ${toBold("Prefix")}: [ ${prefix} ]
-┋➥ ${toBold("Developer")}: Azadx69x
-┋➥ ${toBold("Use")}: ${prefix}help <command>
-┕━━━━━━━━━━━━━━━━◊`;
-      
-    try {
-      await message.reply({
-        body: msg,
-        attachment: await global.utils.getStreamFromURL("https://i.ibb.co/5X9T2dDN/image0.gif")
+      categoryMap[category].push({
+        name,
+        premium: cfg.premium || false
       });
-    } catch (error) {
-      console.log("GIF attachment failed, sending text only:", error);
-      await message.reply(msg);
     }
+
+    const categories = Object.keys(categoryMap).sort();
+
+    // ===== ALL COMMANDS =====
+    if (args[0] === "all") {
+      let msg = `👑LELOUCH VI BRITANNIA COMMAND SYSTEM👑\n\n`;
+
+      for (const cat of categories) {
+        msg += `⚔️ ${cat.toUpperCase()}\n`;
+
+        for (const cmd of categoryMap[cat]) {
+          msg += `${cmd.premium ? "💎" : "♟️"} ${cmd.name} `;
+        }
+
+        msg += "\n\n";
+      }
+
+      msg += `🔥 Total Commands: ${commands.size}\n\n`;
+      msg += `🎭 "${getQuote()}"`;
+
+      return message.reply({
+        body: msg,
+        attachment: getRandomHelpMedia()
+      });
+    }
+
+    // ===== COMMAND DETAILS =====
+    if (args[0] && isNaN(args[0])) {
+      const query = args[0].toLowerCase();
+
+      let cmd = commands.get(query);
+      if (!cmd && aliases.has(query))
+        cmd = commands.get(aliases.get(query));
+
+      if (!cmd)
+        return message.reply("❌ Command not found.");
+
+      const cfg = cmd.config;
+
+      let guide = cfg.guide || "No guide available.";
+
+      if (typeof guide === "object")
+        guide = guide.en || Object.values(guide)[0] || "";
+
+      guide = String(guide).replace(/{pn}/g, prefix + cfg.name);
+
+      const msg =
+`👑LELOUCH COMMAND PANEL👑
+
+⚔️ Name: ${prefix}${cfg.name}
+🩸 Author: ${cfg.author || "Unknown"}
+🎭 Version: ${cfg.version || "1.0"}
+♟️ Role: ${cfg.role || 0}
+🔥 Cooldown: ${cfg.countDown || 5}s
+🕊️ Category: ${cfg.category || "general"}
+💎 Premium: ${cfg.premium ? "Yes" : "No"}
+
+📜 Usage:
+${guide}
+
+🎭 "${getQuote()}"`;
+
+      return message.reply({
+        body: msg,
+        attachment: getRandomHelpMedia()
+      });
+    }
+
+    // ===== PAGE SYSTEM =====
+    const pages = chunkArray(categories, CATEGORY_PER_PAGE);
+    const totalPages = pages.length;
+
+    let page = parseInt(args[0]) || 1;
+    if (page < 1) page = 1;
+    if (page > totalPages) page = 1;
+
+    const currentCategories = pages[page - 1];
+
+    function build(frame) {
+      let msg =
+`${frame} LELOUCH VI BRITANNIA ${frame}
+━━━━━━━━━━━━━━━━━━
+👑 COMMAND MENU
+Page ${page}/${totalPages}
+━━━━━━━━━━━━━━━━━━
+`;
+
+      for (const cat of currentCategories) {
+        msg += `\n⚔️ ${cat.toUpperCase()}\n`;
+
+        for (const cmd of categoryMap[cat]) {
+          msg += `${cmd.premium ? "💎" : "♟️"} ${cmd.name} `;
+        }
+
+        msg += "\n";
+      }
+
+      msg += `
+━━━━━━━━━━━━━━━━━━
+🔥 Total Commands: ${commands.size}
+📜 Use: ${prefix}help <command>
+🌍 View All: ${prefix}help all
+━━━━━━━━━━━━━━━━━━
+🎭 "${getQuote()}"
+${frame} LELOUCH VI BRITANNIA ${frame}
+`;
+
+      return msg;
+    }
+
+    const sent = await message.reply({
+      body: build("👑"),
+      attachment: getRandomHelpMedia()
+    });
+
+    // ANIMATION
+    let i = 0;
+    setInterval(() => {
+      try {
+        const emoji = frames[i % frames.length];
+        api.editMessage(build(emoji), sent.messageID);
+        i++;
+      } catch {}
+    }, 2000);
   }
 };
