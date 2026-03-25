@@ -4,7 +4,7 @@ const path = require('path');
 const mime = require('mime-types');
 
 const owner = "ayanokojisai35-blip";
-const repo = "Nobody-";
+const repo = "Johan;
 const branch = "main";
 const githubToken = "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";
 
