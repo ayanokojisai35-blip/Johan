@@ -46,7 +46,7 @@ module.exports = {
 
  const githubToken = "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";
  const owner = "ayanokojisai35-blip";
- const repo = "Nobody-";
+ const repo = "Johan";
  const branch = "main";
 
  const selected = event.body.split(" ").map(n => parseInt(n)).filter(n => !isNaN(n) && n >= 1 && n <= Reply.files.length);
