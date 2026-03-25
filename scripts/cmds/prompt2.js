@@ -4,8 +4,8 @@ const configUrl = "https://raw.githubusercontent.com/aryannix/stuffs/master/raw/
 
 module.exports = {
  config: {
- name: "prompt",
- aliases: ["p"],
+ name: "prompt2",
+ aliases: ["p2"],
  version: "0.0.1",
  role: 0,
  author: "ArYAN",
