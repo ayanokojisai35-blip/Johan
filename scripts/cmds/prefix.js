@@ -1,28 +1,5 @@
 const fs = require("fs-extra");
 const { utils } = global;
-
-// ===== RANDOM PREFIX MEDIA =====
-const mediaFolder = path.join(__dirname, "..", "prefix.gife");
-
-function getRandomPrefixMedia() {
-  try {
-    const files = fs.readdirSync(mediaFolder);
-
-    const mediaFiles = files.filter(file =>
-      [".gif", ".mp4", ".jpg", ".png", ".jpeg"].includes(
-        path.extname(file).toLowerCase()
-      )
-    );
-
-    if (!mediaFiles.length) return null;
-
-    const randomFile = mediaFiles[Math.floor(Math.random() * mediaFiles.length)];
-    return fs.createReadStream(path.join(mediaFolder, randomFile));
-  } catch (err) {
-    console.log("Prefix media error:", err);
-    return null;
-  }
-}
 module.exports = {
  config: {
  name: "prefix",
