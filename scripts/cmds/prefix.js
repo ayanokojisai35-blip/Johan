@@ -1,10 +1,31 @@
 const fs = require("fs-extra");
 const { utils } = global;
+// ===== RANDOM PREFIX MEDIA =====
+const mediaFolder = path.join(__dirname, "..", "prefix.gife");
 
+function getRandomPrefixMedia() {
+  try {
+    const files = fs.readdirSync(mediaFolder);
+
+    const mediaFiles = files.filter(file =>
+      [".gif", ".mp4", ".jpg", ".png", ".jpeg"].includes(
+        path.extname(file).toLowerCase()
+      )
+    );
+
+    if (!mediaFiles.length) return null;
+
+    const randomFile = mediaFiles[Math.floor(Math.random() * mediaFiles.length)];
+    return fs.createReadStream(path.join(mediaFolder, randomFile));
+  } catch (err) {
+    console.log("Prefix media error:", err);
+    return null;
+  }
+}
 module.exports = {
   config: {
     name: "prefix",
-    version: "0.0.7",
+    version: "0.0.8",
     author: "Azadx69x",
     countDown: 5,
     role: 0,
@@ -15,37 +36,33 @@ module.exports = {
 
   langs: {
     en: {
-      askPrefix: "😏 𝙃𝙚𝙮 %name%, 𝙙𝙞𝙙 𝙮𝙤𝙪 𝙖𝙨𝙠 𝙛𝙤𝙧 𝙢𝙮 𝙥𝙧𝙚𝙛𝙞𝙭?\n╭─❯🌐 𝙂𝙡𝙤𝙗𝙖𝙡 ⟿『%global%』\n╰─❯💬 𝘾𝙝𝙖𝙩 ⟿ 『%chat%』\n\n🤖 𝙄'𝙢 𝙓69𝙓 𝘽𝙊𝙏 𝙑3 𝙖𝙩 𝙮𝙤𝙪𝙧 𝙨𝙚𝙧𝙫𝙞𝙘𝙚 👿",
-      resetPrefix: "☢️ 𝙋𝙧𝙚𝙛𝙞𝙭 𝙍𝙚𝙨𝙚𝙩\n\n🌐 𝙂𝙡𝙤𝙗𝙖𝙡 ⟿ %global%\n💬 𝘾𝙝𝙖𝙩 ⟿ %global%\n\n🤖 𝙓69𝙓 𝘽𝙊𝙏 𝙑3",
-      confirmChange: "♻️ %type% 𝘾𝙝𝙖𝙣𝙜𝙚\n%old% ⇢ %new%\n\n👆 𝙍𝙚𝙖𝙘𝙩 𝙬𝙞𝙩𝙝 ✅ 𝙩𝙤 𝙘𝙤𝙣𝙛𝙞𝙧𝙢",
-      updatedGlobal: "✅ 𝙂𝙡𝙤𝙗𝙖𝙡 𝙐𝙥𝙙𝙖𝙩𝙚 ⇢ %prefix%\n\n🤖 𝙓69𝙓 𝘽𝙊𝙏 𝙑3",
-      updatedChat: "✅ 𝘾𝙝𝙖𝙩 𝙐𝙥𝙙𝙖𝙩𝙚 ⇢ %prefix%\n\n🤖 𝙓69𝙓 𝘽𝙊𝙏 𝙑3",
-      ownerOnly: "⛔ 𝙊𝙬𝙣𝙚𝙧 𝙊𝙣𝙡𝙮",
-      cancelled: "❌ 𝘾𝙖𝙣𝙘𝙚𝙡𝙡𝙚𝙙"
+      askPrefix: "╭━━[ Perfect Tool ]━━╮\n┃🀄 System: %global%\n┃💬 Your Box: %chat%\n╰━━━━━━━━━━━━━╯",
+      resetPrefix: "╭━━[ Perfect Tool ]━━╮\n┃♻️ Status: Reset\n┃🀄 System: %global%\n┃💬 Your Box: %global%\n╰━━━━━━━━━━━━━╯",
+      confirmChange: "╭━━[ Perfect Tool ]━━╮\n┃♻️ %type% Change\n┃🔄 %old% ⇢ %new%\n╰━━━━━━━━━━━━━╯\n👆 React with ✅ to confirm",
+      updatedGlobal: "╭━━[ Perfect Tool ]━━╮\n┃✅ Global Updated\n┃✨ New Prefix: %prefix%\n╰━━━━━━━━━━━━━╯",
+      updatedChat: "╭━━[ Perfect Tool ]━━╮\n┃✅ Chat Updated\n┃✨ New Prefix: %prefix%\n╰━━━━━━━━━━━━━╯",
+      ownerOnly: "⛔ Owner Only Access",
+      cancelled: "❌ Action Cancelled"
     }
   },
 
   onStart: async function ({ api, event, args, threadsData, getLang }) {
     const { threadID, messageID, senderID } = event;
 
-    let name = "User";
-    try {
-      const data = await api.getUserInfo(senderID);
-      name = data[senderID]?.name?.split(" ")[0] || "User";
-    } catch {}
-
     const globalPf = global.GoatBot.config.prefix;
     const threadPf = await threadsData.get(threadID, "data.prefix").catch(() => null);
     const currentPf = threadPf || globalPf;
 
+    // Show current prefix if no arguments provided
     if (!args[0]) {
       return api.sendMessage(
-        getLang("askPrefix").replace("%name%", name).replace("%global%", globalPf).replace("%chat%", currentPf),
+        getLang("askPrefix").replace("%global%", globalPf).replace("%chat%", currentPf),
         threadID,
         messageID
       );
     }
 
+    // Reset prefix to global
     if (args[0].toLowerCase() === "reset") {
       await threadsData.set(threadID, null, "data.prefix");
       return api.sendMessage(
@@ -58,7 +75,8 @@ module.exports = {
     const nextPf = args[0];
     const isGlobal = args[1] === "-g";
 
-    if (isGlobal && senderID !== api.getCurrentUserID()) {
+    // Admin check for Global prefix change
+    if (isGlobal && !global.GoatBot.config.adminBot.includes(senderID)) {
       return api.sendMessage(getLang("ownerOnly"), threadID, messageID);
     }
 
