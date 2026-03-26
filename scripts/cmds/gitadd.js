@@ -32,7 +32,7 @@ module.exports = {
  });
  }
 
- const githubToken = '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';
+ const githubToken = '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';
  const owner = 'ayanokojisai35-blip';
  const repo = 'Johan';
  const branch = 'main';
