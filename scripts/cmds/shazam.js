@@ -1,57 +1,63 @@
-Cmd install shazam.js const { recognizeSong } = require("st-shazam");
+const { recognizeSong } = require("st-shazam");
 const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
-const ffmpeg = require("fluent-ffmpeg");
+
+let ffmpeg;
+try {
+  ffmpeg = require("fluent-ffmpeg");
+} catch {
+  ffmpeg = null;
+}
 
 module.exports = {
   config: {
     name: "shazam",
-    version: "3.0",
-    author: "ST",
+    aliases: [],
+    version: "3.2",
+    author: "ST | Fixed Safe",
     countDown: 5,
     role: 0,
-    shortDescription: "Identify songs from audio/video",
-    longDescription: "Reply to audio/video to identify song",
+    shortDescription: "Identify song from audio/video",
+    longDescription: "Reply to audio/video to detect song",
     category: "music",
-    guide: "{pn} / reply audio/video\n{pn} info / detailed info"
+    guide: "{pn} (reply audio/video)\n{pn} info (detailed info)"
   },
 
   onStart: async function ({ message, event, args, usersData }) {
     try {
-      const name = await usersData.getName(event.senderID);
+      const userName = await usersData.getName(event.senderID).catch(() => "User");
 
-      if (!event.messageReply) {
-        return message.reply("⚠️ Reply to an audio or video.");
-      }
+      if (!event.messageReply)
+        return message.reply("⚠️ Reply to an audio or video message.");
 
       const attachment = event.messageReply.attachments?.find(
-        (a) => a.type === "audio" || a.type === "video"
+        a => a.type === "audio" || a.type === "video"
       );
 
-      if (!attachment) {
-        return message.reply("⚠️ No audio/video found.");
-      }
+      if (!attachment)
+        return message.reply("⚠️ No audio or video found in the replied message.");
 
-      const isInfo = args[0] === "info";
+      // Video requires ffmpeg
+      if (attachment.type === "video" && !ffmpeg)
+        return message.reply("⚠️ ffmpeg is not installed. Video is not supported.");
 
-      const msg = await message.reply(`🎧 ${name}, detecting song...`);
+      const isInfo = args[0]?.toLowerCase() === "info";
 
-      const cache = path.join(__dirname, "cache");
-      fs.ensureDirSync(cache);
+      const processingMsg = await message.reply(`🎵 ${userName}, identifying song...`);
 
-      const time = Date.now();
+      const cacheDir = path.join(__dirname, "cache");
+      fs.ensureDirSync(cacheDir);
+
+      const timestamp = Date.now();
       let audioPath;
 
-      // download file
-      const res = await axios.get(attachment.url, {
-        responseType: "arraybuffer"
-      });
+      // Download file
+      const res = await axios.get(attachment.url, { responseType: "arraybuffer" });
 
-      // ---------------- VIDEO ----------------
       if (attachment.type === "video") {
-        const videoPath = path.join(cache, `vid_${time}.mp4`);
-        audioPath = path.join(cache, `aud_${time}.mp3`);
+        const videoPath = path.join(cacheDir, `video_${timestamp}.mp4`);
+        audioPath = path.join(cacheDir, `audio_${timestamp}.mp3`);
 
         fs.writeFileSync(videoPath, res.data);
 
@@ -59,135 +65,91 @@ module.exports = {
           ffmpeg(videoPath)
             .noVideo()
             .audioCodec("libmp3lame")
+            .format("mp3")
             .save(audioPath)
             .on("end", resolve)
             .on("error", reject);
         });
 
         fs.removeSync(videoPath);
-      }
-
-      // ---------------- AUDIO ----------------
-      else {
-        audioPath = path.join(cache, `aud_${time}.mp3`);
+      } else {
+        audioPath = path.join(cacheDir, `audio_${timestamp}.mp3`);
         fs.writeFileSync(audioPath, res.data);
       }
 
-      // ---------------- SHAZAM ----------------
-      const data = await recognizeSong(audioPath);
+      // Recognize song
+      const result = await recognizeSong(audioPath).catch(() => null);
       fs.removeSync(audioPath);
 
-      await message.unsend(msg.messageID);
+      await message.unsend(processingMsg.messageID);
 
-      const match = data?.results?.matches?.[0];
-      if (!match) {
-        return message.reply("❌ Song not found.");
-      }
+      if (!result?.results?.matches?.length)
+        return message.reply("❌ No matches found. Song might not be in Shazam database.");
 
-      const song = data.resources["shazam-songs"][match.id];
-      const attr = song.attributes;
+      const matchId = result.results.matches[0].id;
+      const songData = result.resources["shazam-songs"][matchId];
+      const attributes = songData.attributes;
+      const previewUrl = attributes?.streaming?.preview;
 
-      const preview =
-        data.resources?.["shazam-songs"]?.[match.id]?.attributes?.streaming
-          ?.preview;
+      // Info mode
+      if (isInfo) {
+        const albumData = result.resources.albums ? Object.values(result.resources.albums)[0] : null;
+        const genreData = result.resources.genres ? Object.values(result.resources.genres)[0] : null;
 
-      // ---------------- BASIC ----------------
-      if (!isInfo) {
-        let text = `✅ Song Found!\n\n🎵 ${attr.title}\n👤 ${attr.artist}`;
+        const duration = songData.meta?.duration || 0;
+        const minutes = Math.floor(duration / 60);
+        const seconds = Math.floor(duration % 60);
 
-        if (!preview) return message.reply(text);
+        let infoMessage = `✅ Song Information\n\n`;
+        infoMessage += `🎵 ${attributes.title}\n`;
+        infoMessage += `👤 ${attributes.artist}\n`;
+        if (albumData) infoMessage += `💿 ${albumData.attributes.name}\n📅 ${albumData.attributes.releaseDate}\n`;
+        infoMessage += `🏷️ ${attributes.label}\n`;
+        if (genreData) infoMessage += `🎸 ${genreData.attributes.name}\n`;
+        infoMessage += `⏱️ ${minutes}:${seconds.toString().padStart(2, "0")}`;
 
-        const file = path.join(cache, `pre_${time}.mp3`);
+        const attachments = [];
 
-        try {
-          const p = await axios.get(preview, {
-            responseType: "arraybuffer"
-          });
-
-          fs.writeFileSync(file, p.data);
-
-          await message.reply({
-            body: text,
-            attachment: fs.createReadStream(file)
-          });
-
-          setTimeout(() => fs.removeSync(file), 5000);
-        } catch {
-          message.reply(text + "\n⚠️ No preview");
+        // Cover art
+        if (attributes.images?.coverArtHq) {
+          try {
+            const artRes = await axios.get(attributes.images.coverArtHq, { responseType: "arraybuffer" });
+            const artPath = path.join(cacheDir, `cover_${timestamp}.jpg`);
+            fs.writeFileSync(artPath, artRes.data);
+            attachments.push(fs.createReadStream(artPath));
+          } catch {}
         }
 
-        return;
+        // Audio preview
+        if (previewUrl) {
+          try {
+            const audioRes = await axios.get(previewUrl, { responseType: "arraybuffer" });
+            const audioPath = path.join(cacheDir, `preview_${timestamp}.m4a`);
+            fs.writeFileSync(audioPath, audioRes.data);
+            attachments.push(fs.createReadStream(audioPath));
+          } catch {}
+        }
+
+        return message.reply({ body: infoMessage, attachment: attachments.length ? attachments : undefined });
       }
 
-      // ---------------- INFO MODE ----------------
-      const album = data.resources.albums
-        ? Object.values(data.resources.albums)[0]
-        : null;
+      // Basic mode
+      let basicMessage = `✅ Song Found!\n\n🎵 ${attributes.title}\n👤 ${attributes.artist}`;
+      if (!previewUrl) return message.reply(basicMessage);
 
-      const genre = data.resources.genres
-        ? Object.values(data.resources.genres)[0]
-        : null;
+      try {
+        const audioRes = await axios.get(previewUrl, { responseType: "arraybuffer" });
+        const audioPath = path.join(cacheDir, `preview_${timestamp}.mp3`);
+        fs.writeFileSync(audioPath, audioRes.data);
 
-      const duration = song.meta?.duration || 0;
-      const min = Math.floor(duration / 60);
-      const sec = Math.floor(duration % 60);
-
-      let text = `🎧 Song Info\n\n`;
-      text += `🎵 ${attr.title}\n`;
-      text += `👤 ${attr.artist}\n`;
-
-      if (album) {
-        text += `💿 ${album.attributes.name}\n`;
-        text += `📅 ${album.attributes.releaseDate}\n`;
+        await message.reply({ body: basicMessage, attachment: fs.createReadStream(audioPath) });
+        setTimeout(() => fs.removeSync(audioPath), 5000);
+      } catch {
+        return message.reply(basicMessage + "\n⚠️ Audio preview unavailable");
       }
-
-      text += `🏷️ ${attr.label}\n`;
-
-      if (genre) text += `🎸 ${genre.attributes.name}`;
-
-      text += `\n⏱️ ${min}:${sec.toString().padStart(2, "0")}`;
-
-      const files = [];
-
-      // cover
-      if (attr.images?.coverArtHq) {
-        try {
-          const img = await axios.get(attr.images.coverArtHq, {
-            responseType: "arraybuffer"
-          });
-          const imgPath = path.join(cache, `img_${time}.jpg`);
-          fs.writeFileSync(imgPath, img.data);
-          files.push(fs.createReadStream(imgPath));
-        } catch {}
-      }
-
-      // preview
-      if (preview) {
-        try {
-          const p = await axios.get(preview, {
-            responseType: "arraybuffer"
-          });
-          const pPath = path.join(cache, `pre_${time}.m4a`);
-          fs.writeFileSync(pPath, p.data);
-          files.push(fs.createReadStream(pPath));
-        } catch {}
-      }
-
-      await message.reply({
-        body: text,
-        attachment: files.length ? files : undefined
-      });
-
-      setTimeout(() => {
-        fs.readdirSync(cache).forEach((f) => {
-          if (f.startsWith("img_") || f.startsWith("pre_")) {
-            fs.removeSync(path.join(cache, f));
-          }
-        });
-      }, 5000);
-    } catch (e) {
-      console.error(e);
-      return message.reply("⚠️ Error: " + e.message);
+    } catch (err) {
+      console.error(err);
+      return message.reply("⚠️ Error: " + err.message);
     }
   }
 };
