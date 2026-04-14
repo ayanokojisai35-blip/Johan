@@ -1,4 +1,4 @@
-const axios = require("axios");
+Cmd install daul.js const axios = require("axios");
 const { createCanvas, loadImage } = require("canvas");
 const { Readable } = require("stream");
 
@@ -145,7 +145,7 @@ module.exports = {
       );
 
       global.GoatBot.onReply.set(sent.messageID, {
-        commandName: "mj2",
+        commandName: "daul",
         author: senderID,
         urls,
         prompt
