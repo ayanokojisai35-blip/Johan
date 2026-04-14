@@ -1,4 +1,4 @@
-Cmd install mj2.js const axios = require("axios");
+const axios = require("axios");
 const { createCanvas, loadImage } = require("canvas");
 const { Readable } = require("stream");
 
